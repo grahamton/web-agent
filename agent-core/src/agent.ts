@@ -625,7 +625,10 @@ export function createAgent(options: CreateAgentOptions): FirecrawlAgent {
 
 export function createAgentFromEnv(overrides?: Partial<CreateAgentOptions>): FirecrawlAgent {
   const firecrawlApiKey = process.env.FIRECRAWL_API_KEY;
-  if (!firecrawlApiKey) throw new Error("FIRECRAWL_API_KEY not set");
+  // Skip the Firecrawl key requirement when a custom toolkit is provided via overrides.
+  if (!firecrawlApiKey && !overrides?.toolkit && !overrides?.firecrawlApiKey) {
+    throw new Error("FIRECRAWL_API_KEY not set");
+  }
 
   const apiKeys: Record<string, string> = {};
   const envMap: Record<string, string> = {

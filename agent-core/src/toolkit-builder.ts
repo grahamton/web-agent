@@ -175,8 +175,15 @@ export function createToolkit(config: ToolkitConfig): Toolkit {
     systemPrompt: config.systemPrompt,
     createFiltered: (enabled) => {
       if (!enabled) return toolSet;
+      const normalized = enabled.map((name) => name.trim().toLowerCase());
+      const unknown = normalized.filter((n) => !enabledNames.has(n));
+      if (unknown.length > 0) {
+        console.warn(
+          `createFiltered: unknown tool name(s): ${unknown.join(", ")}. Available: ${[...enabledNames].join(", ")}`,
+        );
+      }
       return Object.fromEntries(
-        Object.entries(tools).filter(([name]) => enabled.includes(name) && enabledNames.has(name)),
+        Object.entries(tools).filter(([name]) => normalized.includes(name)),
       ) as ToolSet;
     },
   };
