@@ -61,7 +61,9 @@
     "example:structured": "tsx examples/2-structured-output.ts",
     "example:parallel": "tsx examples/3-parallel-subagents.ts",
     "example:skills": "tsx examples/4-with-skills.ts",
-    "example:stream": "tsx examples/5-streaming.ts"
+    "example:stream": "tsx examples/5-streaming.ts",
+    "example:general": "tsx examples/general-agent.ts",
+    "agent": "tsx --env-file=.env examples/general-agent.ts"
   },
   "dependencies": {
     "ai": "^6.0.0",
@@ -110,6 +112,7 @@
     "@langchain/google": "^0.1.10",
     "@langchain/google-genai": "^2.1.26",
     "@langchain/openai": "^1.4.4",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "tsup": "^8.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.3.3",
