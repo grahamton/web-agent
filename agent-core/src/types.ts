@@ -166,8 +166,8 @@ export interface FirecrawlToolsConfig {
 }
 
 export interface CreateAgentOptions {
-  /** Firecrawl API key — used to build the default toolkit */
-  firecrawlApiKey: string;
+  /** Firecrawl API key — used to build the default toolkit. Not required when `toolkit` is provided. */
+  firecrawlApiKey?: string;
   /** Configure which Firecrawl tools are enabled and their defaults */
   firecrawlOptions?: FirecrawlToolsConfig;
   /** Override the default Firecrawl toolkit with a custom one */

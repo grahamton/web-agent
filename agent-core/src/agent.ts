@@ -354,7 +354,7 @@ export class FirecrawlAgent {
 
     const { text } = await generateText({
       model,
-      system: `You are a planning agent for a web research tool powered by Firecrawl. Given a user's request, produce a clear, numbered execution plan.
+      system: `You are a planning agent for a web research tool. Given a user's request, produce a clear, numbered execution plan.
 
 Available tools:
 - search: Web search to discover relevant pages
@@ -390,9 +390,15 @@ Do not use emojis.${schemaSystemLine}`,
 
   private getToolkit(): Toolkit {
     if (this._toolkit) return this._toolkit;
-    this._toolkit =
-      this.options.toolkit ??
-      buildFirecrawlToolkit(this.options.firecrawlApiKey, this.options.firecrawlOptions);
+    if (this.options.toolkit) {
+      this._toolkit = this.options.toolkit;
+    } else if (this.options.firecrawlApiKey) {
+      this._toolkit = buildFirecrawlToolkit(this.options.firecrawlApiKey, this.options.firecrawlOptions);
+    } else {
+      throw new Error(
+        "No toolkit configured. Provide either 'firecrawlApiKey' to use Firecrawl or 'toolkit' to use a custom search/scrape backend.",
+      );
+    }
     return this._toolkit;
   }
 
@@ -619,7 +625,10 @@ export function createAgent(options: CreateAgentOptions): FirecrawlAgent {
 
 export function createAgentFromEnv(overrides?: Partial<CreateAgentOptions>): FirecrawlAgent {
   const firecrawlApiKey = process.env.FIRECRAWL_API_KEY;
-  if (!firecrawlApiKey) throw new Error("FIRECRAWL_API_KEY not set");
+  // Skip the Firecrawl key requirement when a custom toolkit is provided via overrides.
+  if (!firecrawlApiKey && !overrides?.toolkit && !overrides?.firecrawlApiKey) {
+    throw new Error("FIRECRAWL_API_KEY not set");
+  }
 
   const apiKeys: Record<string, string> = {};
   const envMap: Record<string, string> = {
