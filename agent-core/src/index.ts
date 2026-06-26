@@ -50,6 +50,10 @@ export type { SchemaValidationResult } from "./schema-validate";
 export { buildFirecrawlToolkit } from "./toolkit";
 export { firecrawlTools, firecrawlSystemPrompt, utilityTools } from "./firecrawl-tools";
 
+// ─── Generic toolkit builder (use with any search/scrape backend) ───
+export { createToolkit } from "./toolkit-builder";
+export type { ToolkitConfig, SearchResult, ScrapeResult, InteractResult, CrawlPage } from "./toolkit-builder";
+
 // ─── AI SDK ↔ LangChain adapter ───
 export { aiToLc, aiToolkitToLc, coerceStringifiedJson, type AISDKTool } from "./adapter";
 
