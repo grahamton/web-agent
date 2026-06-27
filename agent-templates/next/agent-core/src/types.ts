@@ -166,8 +166,8 @@ export interface FirecrawlToolsConfig {
 }
 
 export interface CreateAgentOptions {
-  /** Firecrawl API key — used to build the default toolkit */
-  firecrawlApiKey: string;
+  /** Firecrawl API key — used to build the default toolkit. Not required when `toolkit` is provided. */
+  firecrawlApiKey?: string;
   /** Configure which Firecrawl tools are enabled and their defaults */
   firecrawlOptions?: FirecrawlToolsConfig;
   /** Override the default Firecrawl toolkit with a custom one */
@@ -188,6 +188,14 @@ export interface CreateAgentOptions {
   maxWorkers?: number;
   /** Max steps per sub-agent (default: 15) */
   workerMaxSteps?: number;
+  /**
+   * Tool names that count as "data collected" and so unblock the terminal
+   * `formatOutput` call. Defaults to the built-in Firecrawl-shaped set
+   * (scrape, search, interact, …). Override when bridging a custom toolkit
+   * whose tools are named differently — e.g. an MCP server exposing
+   * `scrape_url` / `ask_page` / `research`.
+   */
+  dataToolNames?: string[];
   /**
    * App-specific prompt sections appended to the base system prompt.
    * Use this to inject UI-specific policies (planning style, presentation mode,

@@ -75,7 +75,7 @@ type RunState = {
 
 const MAX_SCHEMA_REPAIRS = 3;
 
-function aiToolToLc(name: string, t: any) {
+function aiToolToLc(name: string, t: any, dataTools: Set<string> = DATA_TOOLS) {
   return lcTool(
     async (input: unknown, config?: { configurable?: { runState?: RunState } }) => {
       const runState = config?.configurable?.runState;
@@ -119,7 +119,7 @@ function aiToolToLc(name: string, t: any) {
 
       const result = await t.execute!(input as never);
 
-      if (runState && DATA_TOOLS.has(name) && resultHasData(result)) {
+      if (runState && dataTools.has(name) && resultHasData(result)) {
         runState.dataCollected = true;
       }
 
@@ -129,8 +129,8 @@ function aiToolToLc(name: string, t: any) {
   );
 }
 
-function aiToolkitToLc(tools: Record<string, any>) {
-  return Object.entries(tools).map(([n, t]) => aiToolToLc(n, t));
+function aiToolkitToLc(tools: Record<string, any>, dataTools: Set<string> = DATA_TOOLS) {
+  return Object.entries(tools).map(([n, t]) => aiToolToLc(n, t, dataTools));
 }
 
 // --- Model resolver: ModelConfig → LangChain chat model for Deep Agents ---
@@ -240,7 +240,13 @@ export class FirecrawlAgent {
       )) {
         if (mode === "messages") {
           const [msg] = chunk as unknown as [any, unknown];
-          if (msg?.text) yield { type: "text", content: msg.text };
+          // Only emit assistant-generated text. In "messages" mode the stream
+          // also surfaces ToolMessage chunks whose `.text` is the raw tool
+          // output (e.g. a search result JSON blob) — yielding that as a
+          // "text" event leaks tool output into the assistant transcript.
+          const mtype = msg?.getType?.() ?? msg?._getType?.() ?? msg?.type;
+          const isAssistant = mtype === "ai" || mtype === "AIMessage" || mtype === "AIMessageChunk";
+          if (isAssistant && msg?.text) yield { type: "text", content: msg.text };
           for (const tc of msg?.tool_calls ?? []) {
             yield { type: "tool-call", toolName: tc.name, input: tc.args };
           }
@@ -354,7 +360,7 @@ export class FirecrawlAgent {
 
     const { text } = await generateText({
       model,
-      system: `You are a planning agent for a web research tool powered by Firecrawl. Given a user's request, produce a clear, numbered execution plan.
+      system: `You are a planning agent for a web research tool. Given a user's request, produce a clear, numbered execution plan.
 
 Available tools:
 - search: Web search to discover relevant pages
@@ -390,9 +396,15 @@ Do not use emojis.${schemaSystemLine}`,
 
   private getToolkit(): Toolkit {
     if (this._toolkit) return this._toolkit;
-    this._toolkit =
-      this.options.toolkit ??
-      buildFirecrawlToolkit(this.options.firecrawlApiKey, this.options.firecrawlOptions);
+    if (this.options.toolkit) {
+      this._toolkit = this.options.toolkit;
+    } else if (this.options.firecrawlApiKey) {
+      this._toolkit = buildFirecrawlToolkit(this.options.firecrawlApiKey, this.options.firecrawlOptions);
+    } else {
+      throw new Error(
+        "No toolkit configured. Provide either 'firecrawlApiKey' to use Firecrawl or 'toolkit' to use a custom search/scrape backend.",
+      );
+    }
     return this._toolkit;
   }
 
@@ -403,6 +415,12 @@ Do not use emojis.${schemaSystemLine}`,
       : model;
     const toolkit = this.getToolkit();
     const skillsDir = this.options.skillsDir ?? getDefaultSkillsDir();
+
+    // Which tool names flip `dataCollected` and so unblock formatOutput.
+    // Defaults to the built-in Firecrawl-shaped names; override via
+    // `dataToolNames` when bridging a toolkit with differently-named tools
+    // (e.g. an MCP server exposing `scrape_url` / `ask_page` / `research`).
+    const dataTools = new Set(this.options.dataToolNames ?? [...DATA_TOOLS]);
 
     const uploadedFiles: Record<string, string> = {};
     if (params.uploads?.length) {
@@ -423,7 +441,7 @@ Do not use emojis.${schemaSystemLine}`,
     // would open the artifact panel mid-run with partial data. `bashExec`
     // stays available because sub-agents may need to reshape data.
     const subAgentTools = [
-      ...aiToolkitToLc(toolkit.tools as Record<string, any>),
+      ...aiToolkitToLc(toolkit.tools as Record<string, any>, dataTools),
       aiToolToLc("bashExec", bashExec),
     ];
 
@@ -454,7 +472,7 @@ Do not use emojis.${schemaSystemLine}`,
           description: cfg.description,
           systemPrompt: cfg.instructions ?? `You are ${cfg.name}.`,
           model: cfg.model ? await resolveLcModel(cfg.model, this.options.apiKeys) : subAgentModel,
-          tools: aiToolkitToLc(filtered as Record<string, any>),
+          tools: aiToolkitToLc(filtered as Record<string, any>, dataTools),
           skills: cfg.skills ?? [],
         };
       }),
@@ -619,7 +637,10 @@ export function createAgent(options: CreateAgentOptions): FirecrawlAgent {
 
 export function createAgentFromEnv(overrides?: Partial<CreateAgentOptions>): FirecrawlAgent {
   const firecrawlApiKey = process.env.FIRECRAWL_API_KEY;
-  if (!firecrawlApiKey) throw new Error("FIRECRAWL_API_KEY not set");
+  // Skip the Firecrawl key requirement when a custom toolkit is provided via overrides.
+  if (!firecrawlApiKey && !overrides?.toolkit && !overrides?.firecrawlApiKey) {
+    throw new Error("FIRECRAWL_API_KEY not set");
+  }
 
   const apiKeys: Record<string, string> = {};
   const envMap: Record<string, string> = {

@@ -81,9 +81,13 @@
     "@langchain/anthropic": ">=1.0.0",
     "@langchain/google": ">=0.1.0",
     "@langchain/google-genai": ">=2.0.0",
-    "@langchain/openai": ">=1.0.0"
+    "@langchain/openai": ">=1.0.0",
+    "@modelcontextprotocol/sdk": ">=1.0.0"
   },
   "peerDependenciesMeta": {
+    "@modelcontextprotocol/sdk": {
+      "optional": true
+    },
     "@ai-sdk/anthropic": {
       "optional": true
     },
