@@ -54,6 +54,17 @@ export { firecrawlTools, firecrawlSystemPrompt, utilityTools } from "./firecrawl
 export { createToolkit } from "./toolkit-builder";
 export type { ToolkitConfig, SearchResult, ScrapeResult, InteractResult, CrawlPage } from "./toolkit-builder";
 
+// ─── MCP backend (bridge an MCP server + local model; optional peer dep) ───
+export { buildMcpToolkit, createMcpAgentFromEnv } from "./mcp";
+export type {
+  McpTransport,
+  McpHardeningOptions,
+  BuildMcpToolkitOptions,
+  McpToolkitHandle,
+  CreateMcpAgentOptions,
+  McpAgentHandle,
+} from "./mcp";
+
 // ─── AI SDK ↔ LangChain adapter ───
 export { aiToLc, aiToolkitToLc, coerceStringifiedJson, type AISDKTool } from "./adapter";
 
