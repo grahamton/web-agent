@@ -182,6 +182,67 @@ async function callToolWithRetry(
   };
 }
 
+type JsonSchemaShape = { properties?: Record<string, unknown>; required?: string[] };
+
+// Common wrong keys small models reach for, grouped by the canonical param they
+// usually mean. Used as a first pass before the positional fallback below.
+const ARG_ALIASES: Record<string, string[]> = {
+  url: ["file_path", "filepath", "path", "file", "link", "href", "uri", "page"],
+  query: ["q", "search", "term", "text", "question", "keywords"],
+};
+
+/**
+ * Repair argument keys a small model got wrong before sending them to the MCP
+ * server. Many local models confuse one tool's schema with another's — e.g.
+ * calling `scrape_url` with `file_path` (bleeding in from Deep Agents' built-in
+ * filesystem tools) instead of `url`. A wrong key fails server-side validation,
+ * stalls the data gate, and burns retries.
+ *
+ * Two passes, both schema-driven (no per-tool hardcoding):
+ *   1. Alias map: rename a known wrong key to a missing required param.
+ *   2. Positional fallback: if exactly one provided key is unrecognized and
+ *      exactly one required param is still missing, assume the model just
+ *      mislabeled it and remap.
+ *
+ * Keys already valid per the schema are passed through untouched.
+ */
+function normalizeArgs(args: Record<string, unknown>, schema: JsonSchemaShape): Record<string, unknown> {
+  const props = schema.properties;
+  if (!props || typeof props !== "object") return args;
+  const valid = new Set(Object.keys(props));
+  if (Object.keys(args).every((k) => valid.has(k))) return args;
+
+  const out: Record<string, unknown> = {};
+  const unmatched: string[] = [];
+  for (const [k, v] of Object.entries(args)) {
+    if (valid.has(k)) out[k] = v;
+    else unmatched.push(k);
+  }
+  const required = (Array.isArray(schema.required) ? schema.required : []).filter((r) => valid.has(r));
+  const missing = () => required.filter((r) => !(r in out));
+
+  // 1) alias-based remap
+  for (const key of [...unmatched]) {
+    const canon = missing().find((r) => ARG_ALIASES[r]?.includes(key.toLowerCase()));
+    if (canon) {
+      out[canon] = args[key];
+      unmatched.splice(unmatched.indexOf(key), 1);
+    }
+  }
+
+  // 2) positional fallback: one stray key + one missing required → remap
+  const stillMissing = missing();
+  if (unmatched.length === 1 && stillMissing.length === 1) {
+    out[stillMissing[0]] = args[unmatched[0]];
+    unmatched.length = 0;
+  }
+
+  // Preserve anything we couldn't place (server will report it) so behavior
+  // only ever improves, never silently drops data the model intended to send.
+  for (const key of unmatched) out[key] = args[key];
+  return out;
+}
+
 /** Build an AI SDK ToolSet from the MCP server's tool list, with hardening. */
 function mcpToToolSet(
   client: Client,
@@ -191,18 +252,19 @@ function mcpToToolSet(
   const toolSet: ToolSet = {};
   for (const t of mcpTools) {
     if (opts.keep && !opts.keep.includes(t.name)) continue;
+    const schema = (t.inputSchema ?? { type: "object", properties: {} }) as JsonSchemaShape &
+      Record<string, unknown>;
+    const required = Array.isArray(schema.required) ? schema.required : [];
+    // Name the required params in the description — a cheap up-front nudge that
+    // cuts down on mis-keyed calls from small models.
+    const hint = required.length ? ` (required arguments: ${required.join(", ")})` : "";
     toolSet[t.name] = tool({
-      description: t.description ?? "",
+      description: (t.description ?? "") + hint,
       // MCP inputSchema is already JSON Schema; jsonSchema() adapts it for the AI SDK.
-      inputSchema: jsonSchema((t.inputSchema ?? { type: "object", properties: {} }) as never),
+      inputSchema: jsonSchema(schema as never),
       execute: async (args) => {
-        const res = await callToolWithRetry(
-          client,
-          t.name,
-          (args ?? {}) as Record<string, unknown>,
-          opts.timeoutMs,
-          opts.retries,
-        );
+        const fixed = normalizeArgs((args ?? {}) as Record<string, unknown>, schema);
+        const res = await callToolWithRetry(client, t.name, fixed, opts.timeoutMs, opts.retries);
         return truncate(flattenToolResult(res), opts.maxChars);
       },
     });
