@@ -89,7 +89,7 @@ Run to completion:
 const result = await agent.run({
   prompt: string,                    // the research task (required)
   urls?: string[],                   // seed URLs
-  schema?: object,                   // JSON schema for structured output
+  schema?: object,                   // example/shape object, NOT JSON Schema (see note below)
   format?: 'json' | 'markdown',
   skills?: string[],                 // skills to pre-load
   skillInstructions?: Record<string, string>,  // per-skill custom instructions
@@ -98,6 +98,20 @@ const result = await agent.run({
   exportSkill?: boolean,             // generate reusable skill from the run
 })
 ```
+
+> **`schema` is an example/shape object, not JSON Schema.** Pass the shape of
+> the data you want back — keys are the fields, values are placeholders
+> (`''`, `null`, `0`). Arrays mean "a list of this shape" (the first item is the
+> template). The schema gate checks that every leaf key is present and non-empty.
+>
+> ```typescript
+> // ✅ shape object
+> schema: { ceo: '', foundedYear: 0, sourceUrl: '' }
+> schema: { tiers: [{ name: '', price: '' }] }   // list of objects
+>
+> // ❌ NOT JSON Schema — its keys (type/properties/required) get read as data fields
+> schema: { type: 'object', properties: { ceo: { type: 'string' } }, required: ['ceo'] }
+> ```
 
 #### Subagents
 
